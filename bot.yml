@@ -1,0 +1,47 @@
+name: NBA Instagram Bot
+on:
+  schedule:
+    - cron: '17 14,18,22 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: nba-bot
+  cancel-in-progress: false
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Generate or publish
+        env:
+          DRY_RUN: ${{ vars.DRY_RUN || 'true' }}
+          POST_MODE: scores
+          PUBLIC_BASE_URL: ${{ vars.PUBLIC_BASE_URL }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          GRAPH_VERSION: ${{ vars.GRAPH_VERSION || 'v24.0' }}
+        run: python bot.py
+      - name: Commit generated media and state
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/images state.json pending.json 2>/dev/null || true
+          if ! git diff --cached --quiet; then git commit -m 'Update NBA content queue'; git push; fi
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - uses: actions/deploy-pages@v4
+        id: deployment
